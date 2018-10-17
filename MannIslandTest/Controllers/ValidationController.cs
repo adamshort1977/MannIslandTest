@@ -11,7 +11,7 @@ namespace MannIslandTest.Controllers
     public class ValidationController : Controller
     {
         private string fullAccountNumber;
-        private SortCodeRange sortCodeRange;
+        private IList<SortCodeRange> sortCodeRanges;
 
         public JsonResult Validate(string sortcode, string accountnumber)
         {
@@ -21,63 +21,59 @@ namespace MannIslandTest.Controllers
             //default to accepting in the case that there is no matching sort code (flow chart p10).
             var fileService = new FileService();
             fileService.ImportValacdos();
-            sortCodeRange = fileService.SortCodeRanges.FirstOrDefault(x => x.MinCode.CompareTo(sortcode) <= 0 && x.MaxCode.CompareTo(sortcode) >= 0);
-            if (sortCodeRange!=null) 
+            sortCodeRanges = fileService.SortCodeRanges.Where(x => x.MinCode.CompareTo(sortcode) <= 0 && x.MaxCode.CompareTo(sortcode) >= 0).ToList();
+            foreach(var sortCodeRange in sortCodeRanges)
             {
-                result.Exception = new ValidationException(sortCodeRange.Ex);
-                if (result.Exception.IsImplemented)
+                var validationException = new ValidationException(sortCodeRange.Ex);
+                result.Exception.Add(validationException);
+                if (validationException.IsImplemented)
                 {
                     //handle exceptions first
                     if (sortCodeRange.Ex == 4)
                     {
-                        result.IsValid = validateException4();
+                        result.IsValid = result.IsValid && validateException4(sortCodeRange);
                     }
                     else if (sortCodeRange.Ex == 7)
                     {
-                        result.IsValid = validateException7();
+                        result.IsValid = result.IsValid && validateException7(sortCodeRange);
                     }
                     else
                     {
                         if (sortCodeRange.ValidationMethod == ValidationMethod.mod11)
-                            result.IsValid = validateMod11();
+                            result.IsValid = result.IsValid && validateMod11(sortCodeRange);
                         else if (sortCodeRange.ValidationMethod == ValidationMethod.dblal)
-                            result.IsValid = validateDblal();
+                            result.IsValid = result.IsValid && validateDblal(sortCodeRange);
                         else
-                            result.IsValid = validateMod10();
+                            result.IsValid = result.IsValid && validateMod10(sortCodeRange);
                     }
                 }
                 else
                     result.IsValid = false; //The exception is unhandled, so technically we don't know if the account number is valid.
             }
-            else 
-            {
-                result.Exception = new ValidationException(0); //No exception because there's no sort code
-                                                               //match, should be treated as valid per page 10.
-            }
             return new JsonResult(result);
         }
 
-        private bool validateDblal()
+        private bool validateDblal(SortCodeRange sortCodeRange)
         {
-            return sumIndividualDigits() % 10 == 0;
+            return sumIndividualDigits(sortCodeRange) % 10 == 0;
         }
 
-        private bool validateMod10()
+        private bool validateMod10(SortCodeRange sortCodeRange)
         {
-            return sumWeightings() % 10 == 0;
+            return sumWeightings(sortCodeRange) % 10 == 0;
         }
 
-        private bool validateMod11()
+        private bool validateMod11(SortCodeRange sortCodeRange)
         {
-            return sumWeightings() % 11 == 0;
+            return sumWeightings(sortCodeRange) % 11 == 0;
         }
 
-        private bool validateException4()
+        private bool validateException4(SortCodeRange sortCodeRange)
         {
-            return sumWeightings() % 11 == int.Parse(string.Concat(fullAccountNumber[12], fullAccountNumber[13]));
+            return sumWeightings(sortCodeRange) % 11 == int.Parse(string.Concat(fullAccountNumber[12], fullAccountNumber[13]));
         }
 
-        private bool validateException7()
+        private bool validateException7(SortCodeRange sortCodeRange)
         {
             if (fullAccountNumber[12]==9)
             {
@@ -93,16 +89,16 @@ namespace MannIslandTest.Controllers
             switch (sortCodeRange.ValidationMethod)
             {
                 case ValidationMethod.dblal:
-                    return validateDblal();
+                    return validateDblal(sortCodeRange);
                 case ValidationMethod.mod10:
-                    return validateMod10();
+                    return validateMod10(sortCodeRange);
                 default:
-                    return validateMod11();
+                    return validateMod11(sortCodeRange);
             }
 
         }
 
-        private int sumIndividualDigits() 
+        private int sumIndividualDigits(SortCodeRange sortCodeRange) 
         {
             var weighted_u = sortCodeRange.U * fullAccountNumber[0];
             var weighted_v = sortCodeRange.V * fullAccountNumber[1];
@@ -131,7 +127,7 @@ namespace MannIslandTest.Controllers
             return sum;
         }
 
-        private int sumWeightings()
+        private int sumWeightings(SortCodeRange sortCodeRange)
         {
             var weighted_u = sortCodeRange.U * fullAccountNumber[0];
             var weighted_v = sortCodeRange.V * fullAccountNumber[1];

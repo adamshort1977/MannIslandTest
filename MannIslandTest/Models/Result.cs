@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+
 namespace MannIslandTest.Models
 {
     public class Result
@@ -8,6 +10,6 @@ namespace MannIslandTest.Models
         }
 
         public bool IsValid { get; set; }
-        public ValidationException Exception { get; set; }
+        public IList<ValidationException> Exception = new List<ValidationException>();
     }
 }
